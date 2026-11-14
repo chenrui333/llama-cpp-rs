@@ -1,5 +1,8 @@
 //! Small real inference consumer, rebuilt in external mode before release.
 #[cfg(test)]
+#[path = "../../../llama-cpp-sys-2/build_support/artifacts.rs"]
+mod artifact_contract;
+#[cfg(test)]
 #[allow(dead_code, unexpected_cfgs)]
 #[path = "../../../llama-cpp-sys-2/build_support/external.rs"]
 mod external_contract;

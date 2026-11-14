@@ -348,6 +348,13 @@ same native revision/ABI. zg integration is a separate acceptance-gated step.
 Local entry points: `python native/runtime.py --help`, `python native/e2e.py
 --help`; unit tests: `python -m unittest discover -s native -p 'test_*.py' -v`.
 
+Cargo artifact-layout contracts are also included in the native smoke tests.
+Cargo 1.100 places test executables under each package's build output and no
+longer creates the legacy profile `deps` directory; staging only uses that
+legacy destination when Cargo creates it.
+They can run without compiling native libraries:
+`rustc --test llama-cpp-sys-2/build_support/artifacts.rs -o /tmp/llama-artifact-tests && /tmp/llama-artifact-tests`.
+
 An opt-in macOS ARM64 verification uses a disposable Git snapshot and a genuinely
 empty Cargo Home (not a path dependency). It guards native Git/source downloads,
 CMake and bindgen, tests SDK failures without source fallback, then performs an
