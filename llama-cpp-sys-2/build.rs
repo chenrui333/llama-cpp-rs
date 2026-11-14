@@ -14,6 +14,8 @@ mod external;
 mod automatic;
 #[path = "build_support/source.rs"]
 mod source;
+#[path = "build_support/artifacts.rs"]
+mod artifacts;
 
 enum WindowsVariant {
     Msvc,
@@ -93,16 +95,6 @@ fn parse_target_os() -> Result<(TargetOs, String), String> {
     } else {
         Err(target)
     }
-}
-
-fn get_cargo_target_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let out_dir = env::var("OUT_DIR")?;
-    let path = PathBuf::from(out_dir);
-    let target_dir = path
-        .ancestors()
-        .nth(3)
-        .ok_or("OUT_DIR is not deep enough")?;
-    Ok(target_dir.to_path_buf())
 }
 
 fn extract_lib_names(out_dir: &Path, build_shared_libs: bool, target_os: &TargetOs) -> Vec<String> {
@@ -430,7 +422,9 @@ fn main() {
         parse_target_os().unwrap_or_else(|t| panic!("Failed to parse target os {t}"));
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
 
-    let target_dir = get_cargo_target_dir().unwrap();
+    let target_dir = artifacts::profile_dir(&out_dir)
+        .expect("Cargo profile directory")
+        .to_path_buf();
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("Failed to get CARGO_MANIFEST_DIR");
     let llama_src = source::resolve()
         .unwrap_or_else(|error| panic!("pinned llama.cpp source: {error}"));
@@ -1466,14 +1460,13 @@ fn main() {
     // copy DLLs to target
     if build_shared_libs {
         let libs_assets = extract_lib_assets(&out_dir, &target_os);
+        let legacy_test_dir = artifacts::legacy_test_dir(&target_dir);
         for asset in libs_assets {
-            let asset_clone = asset.clone();
-            let filename = asset_clone.file_name().unwrap();
-            let filename = filename.to_str().unwrap();
+            let filename = asset.file_name().unwrap();
             let dst = target_dir.join(filename);
             debug_log!("HARD LINK {} TO {}", asset.display(), dst.display());
             if !dst.exists() {
-                std::fs::hard_link(asset.clone(), dst).unwrap();
+                std::fs::hard_link(&asset, dst).unwrap();
             }
 
             // Copy DLLs to examples as well
@@ -1481,15 +1474,17 @@ fn main() {
                 let dst = target_dir.join("examples").join(filename);
                 debug_log!("HARD LINK {} TO {}", asset.display(), dst.display());
                 if !dst.exists() {
-                    std::fs::hard_link(asset.clone(), dst).unwrap();
+                    std::fs::hard_link(&asset, dst).unwrap();
                 }
             }
 
-            // Copy DLLs to target/profile/deps as well for tests
-            let dst = target_dir.join("deps").join(filename);
-            debug_log!("HARD LINK {} TO {}", asset.display(), dst.display());
-            if !dst.exists() {
-                std::fs::hard_link(asset.clone(), dst).unwrap();
+            // Cargo 1.100 puts tests under build/<package>/<hash>/out instead.
+            if let Some(directory) = &legacy_test_dir {
+                let dst = directory.join(filename);
+                debug_log!("HARD LINK {} TO {}", asset.display(), dst.display());
+                if !dst.exists() {
+                    std::fs::hard_link(&asset, dst).unwrap();
+                }
             }
         }
     }
